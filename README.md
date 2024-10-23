@@ -1,4 +1,4 @@
-# Sales Data Analysis with Databricks and PySpark
+# Analise de dados de vendas com Databricks e PySpark
 
 ## Descrição do Projeto
 
