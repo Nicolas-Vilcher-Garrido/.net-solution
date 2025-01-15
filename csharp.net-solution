@@ -1,0 +1,164 @@
+// MyDomain.Entities: Representa as entidades principais do domínio
+namespace MyDomain.Entities
+{
+    public class MyEntity
+    {
+        public int Id { get; set; } // Identificador único da entidade
+        public string Name { get; set; } // Nome da entidade
+        public DateTime UpdatedAt { get; set; } // Data de atualização
+    }
+}
+
+// Interface de repositório genérica para CRUD
+namespace MyDomain.Interfaces
+{
+    public interface IRepository<T>
+    {
+        Task<T> GetByIdAsync(int id);
+        Task<IEnumerable<T>> GetAllAsync();
+        Task AddAsync(T entity);
+        Task UpdateAsync(T entity);
+        Task DeleteAsync(int id);
+    }
+}
+
+// Implementação de repositório usando Entity Framework
+using Microsoft.EntityFrameworkCore;
+using MyDomain.Entities;
+
+namespace MyInfrastructure
+{
+    public class MyDbContext : DbContext
+    {
+        public MyDbContext(DbContextOptions<MyDbContext> options) : base(options) { }
+
+        public DbSet<MyEntity> MyEntities { get; set; } // Mapeamento para tabela MyEntities
+    }
+
+    public class MyEntityRepository : IRepository<MyEntity>
+    {
+        private readonly MyDbContext _context;
+
+        public MyEntityRepository(MyDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<MyEntity> GetByIdAsync(int id) => await _context.MyEntities.FindAsync(id);
+
+        public async Task<IEnumerable<MyEntity>> GetAllAsync() => await _context.MyEntities.ToListAsync();
+
+        public async Task AddAsync(MyEntity entity)
+        {
+            await _context.MyEntities.AddAsync(entity);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task UpdateAsync(MyEntity entity)
+        {
+            _context.MyEntities.Update(entity);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task DeleteAsync(int id)
+        {
+            var entity = await GetByIdAsync(id);
+            if (entity != null)
+            {
+                _context.MyEntities.Remove(entity);
+                await _context.SaveChangesAsync();
+            }
+        }
+    }
+}
+
+// Serviço de aplicação para encapsular lógica de negócios
+using MyDomain.Entities;
+using MyDomain.Interfaces;
+
+namespace MyApplication.Services
+{
+    public class MyEntityService
+    {
+        private readonly IRepository<MyEntity> _repository;
+
+        public MyEntityService(IRepository<MyEntity> repository)
+        {
+            _repository = repository;
+        }
+
+        public async Task<MyEntity> GetEntityAsync(int id) => await _repository.GetByIdAsync(id);
+
+        public async Task<IEnumerable<MyEntity>> GetAllEntitiesAsync() => await _repository.GetAllAsync();
+
+        public async Task AddEntityAsync(MyEntity entity) => await _repository.AddAsync(entity);
+
+        public async Task UpdateEntityAsync(MyEntity entity) => await _repository.UpdateAsync(entity);
+
+        public async Task DeleteEntityAsync(int id) => await _repository.DeleteAsync(id);
+    }
+}
+
+// Controlador de API para expor as operações do serviço
+using Microsoft.AspNetCore.Mvc;
+using MyApplication.Services;
+using MyDomain.Entities;
+
+namespace MyWebApi.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class MyEntityController : ControllerBase
+    {
+        private readonly MyEntityService _service;
+
+        public MyEntityController(MyEntityService service)
+        {
+            _service = service;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll() => Ok(await _service.GetAllEntitiesAsync());
+
+        [HttpPost]
+        public async Task<IActionResult> Add([FromBody] MyEntity entity)
+        {
+            await _service.AddEntityAsync(entity);
+            return Ok();
+        }
+    }
+}
+
+// Configuração de background jobs com Hangfire
+using Hangfire;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+namespace MyWorkerService
+{
+    public class Program
+    {
+        public static void Main(string[] args)
+        {
+            Host.CreateDefaultBuilder(args)
+                .ConfigureServices((context, services) =>
+                {
+                    services.AddHangfire(config => config.UseSqlServerStorage("YourConnectionString"));
+                    services.AddHangfireServer();
+                    services.AddSingleton<IMyJob, MyJob>();
+                }).Build().Run();
+        }
+    }
+
+    public interface IMyJob { Task ExecuteAsync(); }
+
+    public class MyJob : IMyJob
+    {
+        public async Task ExecuteAsync()
+        {
+            // Tarefa a ser executada periodicamente
+            Console.WriteLine("Job executado com sucesso!");
+            await Task.CompletedTask;
+        }
+    }
+}
